@@ -1,4 +1,5 @@
 let userName = "";        // learner's name, used to track their progress
+let scoreLoggedForAttempt = false;  // guards against logging the same attempt multiple times
 const CHART_ATTEMPT_STEP = 92;   // fixed px spacing between attempts in the progress chart
 let genderState = null;   // 1 = Raja, 0 = Rani
 // pre question answers
@@ -170,8 +171,13 @@ function showCompressionScore() {
     }
   });
 
-  // 5. Save this attempt to the learner's progress history
-  logProgress();
+  // 5. Save this attempt to the learner's progress history — only once,
+  //    even though this whole function keeps getting called every frame
+  //    for as long as the outcome screen stays on screen.
+  if (!scoreLoggedForAttempt) {
+    logProgress();
+    scoreLoggedForAttempt = true;
+  }
 }
 
 // =====================================================
@@ -2181,6 +2187,7 @@ function reset() {
     slowcount = 0;
     diffGoal = 0;
     play_elapsed = 0;
+    scoreLoggedForAttempt = false;
     breath_no = floor(random(11));
     dialedNumber = '';
 
