@@ -815,6 +815,8 @@ left: 5vw; }
   box-sizing: border-box;
   align-items: center;
   justify-content: flex-start;
+  z-index: 999;      /* sit above anything left over from a practice session */
+  background: #F25C3B;  /* explicit, opaque — nothing behind should ever show through */
 }
 
 .progressHeading {
@@ -872,10 +874,73 @@ left: 5vw; }
   max-height: 300px;
 }
 
-#progressChartCanvas {
+.progressChartScroll {
   width: 100%;
   height: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;      /* Firefox */
+}
+.progressChartScroll::-webkit-scrollbar {
+  display: none;              /* Chrome / Safari */
+}
+
+#progressChartCanvas {
+  height: 100%;
   display: block;
+  touch-action: pan-x;
+}
+
+/* Left/right nudge buttons — shown only when there are enough
+   attempts that the chart actually overflows and needs scrolling. */
+.progressChartArrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  color: #F25C3B;
+  font-size: 20px;
+  font-weight: 700;
+  display: none;   /* toggled to flex by JS when scrollable */
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  z-index: 5;
+}
+.progressChartArrowLeft { left: -6px; }
+.progressChartArrowRight { right: -6px; }
+
+/* Tooltip that appears when a score circle is tapped, showing the
+   exact date/time that attempt was recorded. */
+.progressTooltip {
+  position: absolute;
+  display: none;
+  background: #222;
+  color: #fff;
+  font-family: 'Albert Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 10px;
+  border-radius: 8px;
+  white-space: nowrap;
+  transform: translate(-50%, -100%);
+  pointer-events: none;
+  z-index: 6;
+}
+.progressTooltip::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: #222;
 }
 
 .progressNoData {
@@ -890,11 +955,18 @@ left: 5vw; }
   font-size: 15px;
 }
 
-.progressBackBtn {
+.progressFooter {
   position: absolute;
-  bottom: 6vh;
-  left: 50%;
-  transform: translateX(-50%);
+  bottom: 4vh;
+  left: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.progressBackBtn {
   background: #B6DB54;
   color: #7C9C3D;
   padding: 14px 46px;
@@ -902,6 +974,16 @@ left: 5vw; }
   font-family: 'Albert Sans', sans-serif;
   font-weight: 700;
   font-size: 16px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.progressClearBtn {
+  color: rgba(255, 255, 255, 0.85);
+  font-family: 'Albert Sans', sans-serif;
+  font-weight: 600;
+  font-size: 13px;
+  text-decoration: underline;
   cursor: pointer;
   user-select: none;
 }
