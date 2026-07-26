@@ -1,4 +1,6 @@
 let userName = "";        // learner's name, used to track their progress
+const CHART_ATTEMPT_STEP = 92;   // fixed px spacing between attempts in the progress chart
+let currentChartPoints = [];      // hit-test data for the currently rendered chart (tap-to-see-date)
 let genderState = null;   // 1 = Raja, 0 = Rani
 // pre question answers
 let preAnswers = {
@@ -206,49 +208,84 @@ function getUserProgress() {
   }
 }
 
+// Relative label shown above each point ("Today", "Yesterday", "3 days ago"...)
+function formatRelativeLabel(dateStr) {
+  const d = new Date(dateStr);
+  const startOfDay = (dt) => new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+  const diffDays = Math.round((startOfDay(new Date()) - startOfDay(d)) / 86400000);
+  if (diffDays <= 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
+  if (diffDays < 7) return diffDays + " days ago";
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+// Full date/time shown in the tooltip when a point is tapped
+function formatFullDateTime(dateStr) {
+  const d = new Date(dateStr);
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) +
+    " · " + d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+
 // Draws a lollipop chart of the learner's compression accuracy
 // (normalized to a score out of 100) for each practice attempt,
-// and fills in the "latest score" card above it.
+// and fills in the "latest score" card above it. Attempts are
+// spaced at a fixed width so the chart can be scrolled
+// horizontally instead of squeezing/overlapping as more are added.
 function renderProgressChart() {
   const records = getUserProgress();
   const canvas = document.getElementById("progressChartCanvas");
+  const scrollWrap = document.getElementById("progressChartScroll");
   const noDataEl = document.getElementById("progressNoData");
   const latestScoreEl = document.getElementById("progressLatestScore");
+  const arrowLeft = document.getElementById("progressChartArrowLeft");
+  const arrowRight = document.getElementById("progressChartArrowRight");
+  const tooltip = document.getElementById("progressTooltip");
+
+  if (tooltip) tooltip.style.display = "none";
+  currentChartPoints = [];
 
   // Latest score card always reflects the most recent attempt
   if (latestScoreEl) {
     latestScoreEl.textContent = records.length ? records[records.length - 1].percent : 0;
   }
 
-  if (!canvas) return;
+  if (!canvas || !scrollWrap) return;
   const ctx = canvas.getContext("2d");
 
   if (records.length === 0) {
-    canvas.style.display = "none";
+    scrollWrap.style.display = "none";
+    if (arrowLeft) arrowLeft.style.display = "none";
+    if (arrowRight) arrowRight.style.display = "none";
     if (noDataEl) noDataEl.style.display = "block";
     return;
   }
-  canvas.style.display = "block";
+  scrollWrap.style.display = "block";
   if (noDataEl) noDataEl.style.display = "none";
+
+  const leftPad = 34;   // room for the rotated y-axis label
+  const rightPad = 24;
+  const topPad = 44;    // room for the top-most circle + date label
+  const bottomPad = 34; // room for x-axis + "Attempt" label
+  const radius = 22;
+
+  // Fixed spacing per attempt so points never overlap — the chart
+  // simply grows wider and becomes scrollable instead.
+  const wrapWidth = scrollWrap.clientWidth || 320;
+  const contentWidth = Math.max(wrapWidth, leftPad + rightPad + CHART_ATTEMPT_STEP * records.length);
+  const cssHeight = scrollWrap.clientHeight || 260;
 
   // Match canvas resolution to its displayed CSS size for a crisp draw
   const dpr = window.devicePixelRatio || 1;
-  const cssWidth = canvas.clientWidth || 320;
-  const cssHeight = canvas.clientHeight || 260;
-  canvas.width = cssWidth * dpr;
+  canvas.style.width = contentWidth + "px";
+  canvas.width = contentWidth * dpr;
   canvas.height = cssHeight * dpr;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.scale(dpr, dpr);
-  ctx.clearRect(0, 0, cssWidth, cssHeight);
+  ctx.clearRect(0, 0, contentWidth, cssHeight);
 
-  const leftPad = 34;   // room for the rotated y-axis label
-  const rightPad = 16;
-  const topPad = 30;    // room for the top-most circle
-  const bottomPad = 34; // room for x-axis + "Attempt" label
-  const w = cssWidth - leftPad - rightPad;
+  const w = contentWidth - leftPad - rightPad;
   const h = cssHeight - topPad - bottomPad;
   const baseY = topPad + h; // the x-axis line (score = 0)
-  const radius = 22;
 
   // y-axis line
   ctx.strokeStyle = "rgba(255,255,255,0.6)";
@@ -275,14 +312,17 @@ function renderProgressChart() {
   ctx.textAlign = "center";
   ctx.fillText("Attempt", leftPad + w / 2, cssHeight - 6);
 
-  const n = records.length;
-  const step = n === 1 ? w / 2 : w / n;
-
   records.forEach((r, i) => {
-    const x = leftPad + step * i + step / 2;
+    const x = leftPad + CHART_ATTEMPT_STEP * i + CHART_ATTEMPT_STEP / 2;
     const scoreHeight = (h - radius - 8) * (Math.min(r.percent, 100) / 100);
     const y = baseY - scoreHeight - radius;
     const color = r.percent >= 80 ? "#038660" : "#FF5058";
+
+    // relative date label above the circle
+    ctx.fillStyle = "rgba(255,255,255,0.85)";
+    ctx.font = "10px 'Albert Sans', sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(formatRelativeLabel(r.date), x, y - radius - 8);
 
     // stem from axis up to the circle
     ctx.strokeStyle = "rgba(255,255,255,0.85)";
@@ -313,7 +353,19 @@ function renderProgressChart() {
     ctx.fillStyle = "rgba(255,255,255,0.9)";
     ctx.font = "11px 'Albert Sans', sans-serif";
     ctx.fillText(i + 1, x, baseY + 16);
+
+    // remember this point (in canvas-local CSS px) for tap hit-testing
+    currentChartPoints.push({ x, y, radius, record: r });
   });
+
+  // Show the left/right nudge arrows only when the chart actually
+  // overflows its visible width and needs to be scrolled.
+  const overflowing = contentWidth > wrapWidth + 1;
+  if (arrowLeft) arrowLeft.style.display = overflowing ? "flex" : "none";
+  if (arrowRight) arrowRight.style.display = overflowing ? "flex" : "none";
+
+  // Start scrolled to the most recent attempt so it's visible by default
+  scrollWrap.scrollLeft = scrollWrap.scrollWidth;
 }
 // setup question function 
 function setupQuestion(config) {
@@ -384,6 +436,12 @@ window.onload = () => {
   const checkProgressBtnRaja = document.getElementById("checkProgressBtnRaja");
   const checkProgressBtnRani = document.getElementById("checkProgressBtnRani");
   const progressBackBtn = document.getElementById("progressBackBtn");
+  const progressClearBtn = document.getElementById("progressClearBtn");
+  const progressChartCanvas = document.getElementById("progressChartCanvas");
+  const progressChartScroll = document.getElementById("progressChartScroll");
+  const progressChartArrowLeft = document.getElementById("progressChartArrowLeft");
+  const progressChartArrowRight = document.getElementById("progressChartArrowRight");
+  const progressTooltip = document.getElementById("progressTooltip");
   const preq1 = document.getElementById("preq1");
   const preq1input = document.getElementById("preq1input");
   const preq1Next = document.getElementById("preq1Next");
@@ -1362,8 +1420,19 @@ postq7Next.addEventListener("touchstart", handlePostQ7Next);
     // ========================================
     // CHECK PROGRESS BUTTON
     // ========================================
+
+    // Defensively hides every full-screen view (and stops the p5 canvas)
+    // before showing the progress screen, so nothing from a previous
+    // practice session can visually bleed through behind the chart.
+    const hideAllScreens = () => {
+        document.querySelectorAll('.screen, .skinscreen, .blueskinscreen').forEach(el => {
+            if (el.id !== 'progressScreen') el.style.display = 'none';
+        });
+        removeCanvas();
+    };
+
     const openProgress = (fromScreen) => {
-        fromScreen.style.display = "none";
+        hideAllScreens();
         progressScreen.style.display = "flex";
         renderProgressChart();
     };
@@ -1388,6 +1457,73 @@ postq7Next.addEventListener("touchstart", handlePostQ7Next);
         progressBackBtn.addEventListener('click', closeProgress);
         progressBackBtn.addEventListener('touchstart', closeProgress);
     }
+
+    if (progressClearBtn) {
+        const clearProgress = (e) => {
+            if (e) e.preventDefault();
+            const ok = window.confirm("Clear all saved progress for " + (userName || "Friend") + "? This can't be undone.");
+            if (!ok) return;
+            try {
+                const log = JSON.parse(localStorage.getItem("cprProgressLog") || "[]");
+                const remaining = log.filter(r => r.name !== (userName || "Friend"));
+                localStorage.setItem("cprProgressLog", JSON.stringify(remaining));
+            } catch (err) {
+                console.error("Could not clear progress:", err);
+            }
+            renderProgressChart();
+        };
+        progressClearBtn.addEventListener('click', clearProgress);
+        progressClearBtn.addEventListener('touchstart', clearProgress);
+    }
+
+    // Left/right nudge arrows scroll the chart by one attempt's width
+    if (progressChartArrowLeft && progressChartScroll) {
+        const scrollLeftHandler = () => {
+            progressChartScroll.scrollBy({ left: -CHART_ATTEMPT_STEP * 2, behavior: 'smooth' });
+        };
+        progressChartArrowLeft.addEventListener('click', scrollLeftHandler);
+        progressChartArrowLeft.addEventListener('touchstart', scrollLeftHandler);
+    }
+    if (progressChartArrowRight && progressChartScroll) {
+        const scrollRightHandler = () => {
+            progressChartScroll.scrollBy({ left: CHART_ATTEMPT_STEP * 2, behavior: 'smooth' });
+        };
+        progressChartArrowRight.addEventListener('click', scrollRightHandler);
+        progressChartArrowRight.addEventListener('touchstart', scrollRightHandler);
+    }
+
+    // Tapping a score circle shows exactly when that attempt happened
+    if (progressChartCanvas && progressTooltip) {
+        const handleChartTap = (clientX, clientY) => {
+            const rect = progressChartCanvas.getBoundingClientRect();
+            const tapX = clientX - rect.left;
+            const tapY = clientY - rect.top;
+
+            const hit = currentChartPoints.find(p => {
+                const dx = tapX - p.x;
+                const dy = tapY - p.y;
+                return Math.sqrt(dx * dx + dy * dy) <= p.radius + 6;
+            });
+
+            if (!hit) {
+                progressTooltip.style.display = "none";
+                return;
+            }
+
+            progressTooltip.textContent = formatFullDateTime(hit.record.date) + " · " + hit.record.percent + "/100";
+            progressTooltip.style.left = (rect.left - progressChartScroll.getBoundingClientRect().left + hit.x) + "px";
+            progressTooltip.style.top = (hit.y - hit.radius - 4) + "px";
+            progressTooltip.style.display = "block";
+        };
+
+        progressChartCanvas.addEventListener('click', (e) => handleChartTap(e.clientX, e.clientY));
+        progressChartCanvas.addEventListener('touchend', (e) => {
+            if (e.changedTouches && e.changedTouches[0]) {
+                handleChartTap(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
+            }
+        });
+    }
+
 
 
     const handleNextAmb = () => {
