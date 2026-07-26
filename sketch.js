@@ -1,6 +1,5 @@
 let userName = "";        // learner's name, used to track their progress
 const CHART_ATTEMPT_STEP = 92;   // fixed px spacing between attempts in the progress chart
-let currentChartPoints = [];      // hit-test data for the currently rendered chart (tap-to-see-date)
 let genderState = null;   // 1 = Raja, 0 = Rani
 // pre question answers
 let preAnswers = {
@@ -226,14 +225,19 @@ function formatFullDateTime(dateStr) {
     " · " + d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 }
 
-// Draws a lollipop chart of the learner's compression accuracy
-// (normalized to a score out of 100) for each practice attempt,
-// and fills in the "latest score" card above it. Attempts are
-// spaced at a fixed width so the chart can be scrolled
-// horizontally instead of squeezing/overlapping as more are added.
+const CHART_BASELINE_OFFSET = 20; // px reserved below the baseline for attempt numbers
+const CHART_TOP_GAP = 34;         // px reserved above the tallest point for its date label
+const CHART_POINT_RADIUS = 22;    // px, half the circle's 44px diameter
+
+// Builds a lollipop chart of the learner's compression accuracy
+// (normalized to a score out of 100) for each practice attempt, using
+// plain positioned DOM elements (not canvas) so it scrolls, sizes, and
+// hit-tests reliably across devices. Attempts are spaced at a fixed
+// width so points never overlap — the track just grows wider and
+// becomes horizontally scrollable instead.
 function renderProgressChart() {
   const records = getUserProgress();
-  const canvas = document.getElementById("progressChartCanvas");
+  const track = document.getElementById("progressChartTrack");
   const scrollWrap = document.getElementById("progressChartScroll");
   const chartWrap = document.getElementById("progressChartWrap");
   const noDataEl = document.getElementById("progressNoData");
@@ -241,141 +245,112 @@ function renderProgressChart() {
   const arrowLeft = document.getElementById("progressChartArrowLeft");
   const arrowRight = document.getElementById("progressChartArrowRight");
   const tooltip = document.getElementById("progressTooltip");
+  const yLabel = document.querySelector(".progressChartYLabel");
+  const xLabel = document.querySelector(".progressChartXLabel");
 
   if (tooltip) tooltip.style.display = "none";
-  currentChartPoints = [];
 
   // Latest score card always reflects the most recent attempt
   if (latestScoreEl) {
     latestScoreEl.textContent = records.length ? records[records.length - 1].percent : 0;
   }
 
-  if (!canvas || !scrollWrap || !chartWrap) return;
-  const ctx = canvas.getContext("2d");
+  if (!track || !scrollWrap || !chartWrap) return;
+  track.innerHTML = "";
 
   if (records.length === 0) {
     scrollWrap.style.display = "none";
+    if (yLabel) yLabel.style.display = "none";
+    if (xLabel) xLabel.style.display = "none";
     if (arrowLeft) arrowLeft.style.display = "none";
     if (arrowRight) arrowRight.style.display = "none";
     if (noDataEl) noDataEl.style.display = "block";
     return;
   }
   scrollWrap.style.display = "block";
+  if (yLabel) yLabel.style.display = "flex";
+  if (xLabel) xLabel.style.display = "block";
   if (noDataEl) noDataEl.style.display = "none";
 
-  const leftPad = 34;   // room for the rotated y-axis label
-  const rightPad = 24;
-  const topPad = 44;    // room for the top-most circle + date label
-  const bottomPad = 34; // room for x-axis + "Attempt" label
-  const radius = 22;
-
-  // Measure off the outer wrap (which has an explicit CSS height) rather
-  // than the scrollable inner div, and set explicit pixel heights on the
-  // way down instead of relying on percentage heights to cascade through
-  // several nested absolutely-positioned elements.
   const wrapRect = chartWrap.getBoundingClientRect();
-  const wrapWidth = Math.round(wrapRect.width) || 320;
-  const cssHeight = Math.round(wrapRect.height) || 260;
+  const trackHeight = Math.max(Math.round(wrapRect.height) - CHART_BASELINE_OFFSET, 140);
+  const scrollVisibleWidth = Math.round(wrapRect.width) - 26; // minus the y-label gutter
+  const contentWidth = Math.max(scrollVisibleWidth, CHART_ATTEMPT_STEP * records.length + 20);
 
-  scrollWrap.style.height = cssHeight + "px";
-  canvas.style.height = cssHeight + "px";
+  track.style.width = contentWidth + "px";
+  track.style.height = trackHeight + "px";
 
-  // Fixed spacing per attempt so points never overlap — the chart
-  // simply grows wider and becomes scrollable instead.
-  const contentWidth = Math.max(wrapWidth, leftPad + rightPad + CHART_ATTEMPT_STEP * records.length);
+  const baseline = document.createElement("div");
+  baseline.className = "chartBaseline";
+  baseline.style.bottom = CHART_BASELINE_OFFSET + "px";
+  track.appendChild(baseline);
 
-  // Match canvas resolution to its displayed CSS size for a crisp draw
-  const dpr = window.devicePixelRatio || 1;
-  canvas.style.width = contentWidth + "px";
-  canvas.width = Math.round(contentWidth * dpr);
-  canvas.height = Math.round(cssHeight * dpr);
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.scale(dpr, dpr);
-  ctx.clearRect(0, 0, contentWidth, cssHeight);
+  const axisV = document.createElement("div");
+  axisV.className = "chartAxisVertical";
+  axisV.style.bottom = CHART_BASELINE_OFFSET + "px";
+  axisV.style.top = "0px";
+  track.appendChild(axisV);
 
-  const w = contentWidth - leftPad - rightPad;
-  const h = cssHeight - topPad - bottomPad;
-  const baseY = topPad + h; // the x-axis line (score = 0)
-
-  // y-axis line
-  ctx.strokeStyle = "rgba(255,255,255,0.6)";
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.moveTo(leftPad, topPad - 10);
-  ctx.lineTo(leftPad, baseY);
-  ctx.lineTo(leftPad + w, baseY);
-  ctx.stroke();
-
-  // rotated "Compression Score" y-axis label
-  ctx.save();
-  ctx.fillStyle = "rgba(255,255,255,0.9)";
-  ctx.font = "11px 'Albert Sans', sans-serif";
-  ctx.textAlign = "center";
-  ctx.translate(12, topPad + h / 2);
-  ctx.rotate(-Math.PI / 2);
-  ctx.fillText("Compression Score", 0, 0);
-  ctx.restore();
-
-  // "Attempt" x-axis label
-  ctx.fillStyle = "rgba(255,255,255,0.9)";
-  ctx.font = "12px 'Albert Sans', sans-serif";
-  ctx.textAlign = "center";
-  ctx.fillText("Attempt", leftPad + w / 2, cssHeight - 6);
+  const usableHeight = Math.max(trackHeight - CHART_BASELINE_OFFSET - CHART_TOP_GAP - CHART_POINT_RADIUS, 40);
 
   records.forEach((r, i) => {
-    const x = leftPad + CHART_ATTEMPT_STEP * i + CHART_ATTEMPT_STEP / 2;
-    const scoreHeight = (h - radius - 8) * (Math.min(r.percent, 100) / 100);
-    const y = baseY - scoreHeight - radius;
+    const x = CHART_ATTEMPT_STEP * i + CHART_ATTEMPT_STEP / 2;
+    const scoreOffset = usableHeight * (Math.min(r.percent, 100) / 100);
+    const centerBottom = CHART_BASELINE_OFFSET + CHART_POINT_RADIUS + scoreOffset;
     const color = r.percent >= 80 ? "#038660" : "#FF5058";
 
-    // relative date label above the circle
-    ctx.fillStyle = "rgba(255,255,255,0.85)";
-    ctx.font = "10px 'Albert Sans', sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText(formatRelativeLabel(r.date), x, y - radius - 8);
+    const stem = document.createElement("div");
+    stem.className = "chartStem";
+    stem.style.left = x + "px";
+    stem.style.bottom = "0px";
+    stem.style.height = centerBottom + "px";
+    track.appendChild(stem);
 
-    // stem from axis up to the circle
-    ctx.strokeStyle = "rgba(255,255,255,0.85)";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(x, baseY);
-    ctx.lineTo(x, y + radius);
-    ctx.stroke();
+    const point = document.createElement("div");
+    point.className = "chartPoint";
+    point.style.left = x + "px";
+    point.style.bottom = centerBottom + "px";
+    point.style.background = color;
+    point.textContent = r.percent + "/100";
+    const onTap = (e) => { e.preventDefault(); showChartTooltip(point, r); };
+    point.addEventListener("click", onTap);
+    point.addEventListener("touchend", onTap);
+    track.appendChild(point);
 
-    // circle
-    ctx.beginPath();
-    ctx.arc(x, y, radius, 0, Math.PI * 2);
-    ctx.fillStyle = color;
-    ctx.fill();
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = "#ffffff";
-    ctx.stroke();
+    const dateLabel = document.createElement("div");
+    dateLabel.className = "chartDateLabel";
+    dateLabel.style.left = x + "px";
+    dateLabel.style.bottom = (centerBottom + CHART_POINT_RADIUS + 6) + "px";
+    dateLabel.textContent = formatRelativeLabel(r.date);
+    track.appendChild(dateLabel);
 
-    // score label inside circle, e.g. "90/100"
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 11px 'Albert Sans', sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(r.percent + "/100", x, y);
-    ctx.textBaseline = "alphabetic";
-
-    // attempt number under the axis
-    ctx.fillStyle = "rgba(255,255,255,0.9)";
-    ctx.font = "11px 'Albert Sans', sans-serif";
-    ctx.fillText(i + 1, x, baseY + 16);
-
-    // remember this point (in canvas-local CSS px) for tap hit-testing
-    currentChartPoints.push({ x, y, radius, record: r });
+    const attemptLabel = document.createElement("div");
+    attemptLabel.className = "chartAttemptLabel";
+    attemptLabel.style.left = x + "px";
+    attemptLabel.style.bottom = "2px";
+    attemptLabel.textContent = i + 1;
+    track.appendChild(attemptLabel);
   });
 
-  // Show the left/right nudge arrows only when the chart actually
-  // overflows its visible width and needs to be scrolled.
-  const overflowing = contentWidth > wrapWidth + 1;
+  const overflowing = contentWidth > scrollVisibleWidth + 1;
   if (arrowLeft) arrowLeft.style.display = overflowing ? "flex" : "none";
   if (arrowRight) arrowRight.style.display = overflowing ? "flex" : "none";
 
   // Start scrolled to the most recent attempt so it's visible by default
   scrollWrap.scrollLeft = scrollWrap.scrollWidth;
+}
+
+// Shows a small tooltip with the exact date/time above a tapped point
+function showChartTooltip(pointEl, record) {
+  const tooltip = document.getElementById("progressTooltip");
+  const chartWrap = document.getElementById("progressChartWrap");
+  if (!tooltip || !chartWrap) return;
+  const pointRect = pointEl.getBoundingClientRect();
+  const wrapRect = chartWrap.getBoundingClientRect();
+  tooltip.textContent = formatFullDateTime(record.date) + " · " + record.percent + "/100";
+  tooltip.style.left = (pointRect.left - wrapRect.left + pointRect.width / 2) + "px";
+  tooltip.style.top = (pointRect.top - wrapRect.top) + "px";
+  tooltip.style.display = "block";
 }
 // setup question function 
 function setupQuestion(config) {
@@ -447,7 +422,6 @@ window.onload = () => {
   const checkProgressBtnRani = document.getElementById("checkProgressBtnRani");
   const progressBackBtn = document.getElementById("progressBackBtn");
   const progressClearBtn = document.getElementById("progressClearBtn");
-  const progressChartCanvas = document.getElementById("progressChartCanvas");
   const progressChartScroll = document.getElementById("progressChartScroll");
   const progressChartArrowLeft = document.getElementById("progressChartArrowLeft");
   const progressChartArrowRight = document.getElementById("progressChartArrowRight");
@@ -1502,38 +1476,6 @@ postq7Next.addEventListener("touchstart", handlePostQ7Next);
         };
         progressChartArrowRight.addEventListener('click', scrollRightHandler);
         progressChartArrowRight.addEventListener('touchstart', scrollRightHandler);
-    }
-
-    // Tapping a score circle shows exactly when that attempt happened
-    if (progressChartCanvas && progressTooltip) {
-        const handleChartTap = (clientX, clientY) => {
-            const rect = progressChartCanvas.getBoundingClientRect();
-            const tapX = clientX - rect.left;
-            const tapY = clientY - rect.top;
-
-            const hit = currentChartPoints.find(p => {
-                const dx = tapX - p.x;
-                const dy = tapY - p.y;
-                return Math.sqrt(dx * dx + dy * dy) <= p.radius + 6;
-            });
-
-            if (!hit) {
-                progressTooltip.style.display = "none";
-                return;
-            }
-
-            progressTooltip.textContent = formatFullDateTime(hit.record.date) + " · " + hit.record.percent + "/100";
-            progressTooltip.style.left = (rect.left - progressChartScroll.getBoundingClientRect().left + hit.x) + "px";
-            progressTooltip.style.top = (hit.y - hit.radius - 4) + "px";
-            progressTooltip.style.display = "block";
-        };
-
-        progressChartCanvas.addEventListener('click', (e) => handleChartTap(e.clientX, e.clientY));
-        progressChartCanvas.addEventListener('touchend', (e) => {
-            if (e.changedTouches && e.changedTouches[0]) {
-                handleChartTap(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
-            }
-        });
     }
 
 
