@@ -235,6 +235,7 @@ function renderProgressChart() {
   const records = getUserProgress();
   const canvas = document.getElementById("progressChartCanvas");
   const scrollWrap = document.getElementById("progressChartScroll");
+  const chartWrap = document.getElementById("progressChartWrap");
   const noDataEl = document.getElementById("progressNoData");
   const latestScoreEl = document.getElementById("progressLatestScore");
   const arrowLeft = document.getElementById("progressChartArrowLeft");
@@ -249,7 +250,7 @@ function renderProgressChart() {
     latestScoreEl.textContent = records.length ? records[records.length - 1].percent : 0;
   }
 
-  if (!canvas || !scrollWrap) return;
+  if (!canvas || !scrollWrap || !chartWrap) return;
   const ctx = canvas.getContext("2d");
 
   if (records.length === 0) {
@@ -268,17 +269,26 @@ function renderProgressChart() {
   const bottomPad = 34; // room for x-axis + "Attempt" label
   const radius = 22;
 
+  // Measure off the outer wrap (which has an explicit CSS height) rather
+  // than the scrollable inner div, and set explicit pixel heights on the
+  // way down instead of relying on percentage heights to cascade through
+  // several nested absolutely-positioned elements.
+  const wrapRect = chartWrap.getBoundingClientRect();
+  const wrapWidth = Math.round(wrapRect.width) || 320;
+  const cssHeight = Math.round(wrapRect.height) || 260;
+
+  scrollWrap.style.height = cssHeight + "px";
+  canvas.style.height = cssHeight + "px";
+
   // Fixed spacing per attempt so points never overlap — the chart
   // simply grows wider and becomes scrollable instead.
-  const wrapWidth = scrollWrap.clientWidth || 320;
   const contentWidth = Math.max(wrapWidth, leftPad + rightPad + CHART_ATTEMPT_STEP * records.length);
-  const cssHeight = scrollWrap.clientHeight || 260;
 
   // Match canvas resolution to its displayed CSS size for a crisp draw
   const dpr = window.devicePixelRatio || 1;
   canvas.style.width = contentWidth + "px";
-  canvas.width = contentWidth * dpr;
-  canvas.height = cssHeight * dpr;
+  canvas.width = Math.round(contentWidth * dpr);
+  canvas.height = Math.round(cssHeight * dpr);
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.scale(dpr, dpr);
   ctx.clearRect(0, 0, contentWidth, cssHeight);
@@ -1434,7 +1444,9 @@ postq7Next.addEventListener("touchstart", handlePostQ7Next);
     const openProgress = (fromScreen) => {
         hideAllScreens();
         progressScreen.style.display = "flex";
-        renderProgressChart();
+        // Defer to the next frame so the browser has definitely laid out
+        // the now-visible screen before we measure it for the chart.
+        requestAnimationFrame(() => renderProgressChart());
     };
 
     if (checkProgressBtnRaja) {
