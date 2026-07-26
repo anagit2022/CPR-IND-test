@@ -657,9 +657,13 @@
 
       </div>
 
-      <img src="practice again button.png" id="practiceagainbtnraja" />
+      <div class="sealedActionsRow">
 
-      <div class="checkProgressBtn" id="checkProgressBtnRaja">📊 My Progress</div>
+        <img src="practice again button.png" id="practiceagainbtnraja" />
+
+        <div class="checkProgressBtn" id="checkProgressBtnRaja">📊 My Progress</div>
+
+      </div>
 
     </div> 
 
@@ -713,9 +717,13 @@
 
       </div>
 
-      <img src="practice again button.png" id="practiceagainbtnrani" />
+      <div class="sealedActionsRow">
 
-      <div class="checkProgressBtn" id="checkProgressBtnRani">📊 My Progress</div>
+        <img src="practice again button.png" id="practiceagainbtnrani" />
+
+        <div class="checkProgressBtn" id="checkProgressBtnRani">📊 My Progress</div>
+
+      </div>
 
     </div> 
 
@@ -1951,34 +1959,29 @@
 
     <div class="screen" id="progressScreen">
 
-      <div class="progressCard">
+      <div class="progressHeading">Compression<br>performance</div>
 
-        <div class="progressCardTitle">📈 <span id="progressUserName">Friend</span>'s Progress</div>
+      <div class="progressLatestCard">
 
-        <canvas id="progressChartCanvas" width="320" height="180"></canvas>
+        <div class="progressLatestLabel">Good compression score</div>
 
-        <div class="progressStats">
-
-          <div class="progressStat">
-            <div class="progressStatValue" id="progressBest">--</div>
-            <div class="progressStatLabel">Best Score</div>
-          </div>
-
-          <div class="progressStat">
-            <div class="progressStatValue" id="progressAvg">--</div>
-            <div class="progressStatLabel">Average</div>
-          </div>
-
-          <div class="progressStat">
-            <div class="progressStatValue" id="progressCount">0</div>
-            <div class="progressStatLabel">Attempts</div>
-          </div>
-
+        <div class="progressLatestValue">
+          <span id="progressLatestScore">0</span><span class="progressLatestDenom">/100</span>
         </div>
 
-        <div class="progressBackBtn" id="progressBackBtn">Back</div>
+      </div>
+
+      <div class="progressChartWrap">
+
+        <canvas id="progressChartCanvas"></canvas>
 
       </div>
+
+      <div class="progressNoData" id="progressNoData" style="display:none;">
+        No practice sessions yet — try a mission!
+      </div>
+
+      <div class="progressBackBtn" id="progressBackBtn">Back</div>
 
     </div>
 
