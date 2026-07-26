@@ -206,89 +206,113 @@ function getUserProgress() {
   }
 }
 
-// Draws a simple line chart of the learner's compression
-// accuracy (%) over each of their practice attempts.
+// Draws a lollipop chart of the learner's compression accuracy
+// (normalized to a score out of 100) for each practice attempt,
+// and fills in the "latest score" card above it.
 function renderProgressChart() {
   const records = getUserProgress();
   const canvas = document.getElementById("progressChartCanvas");
+  const noDataEl = document.getElementById("progressNoData");
+  const latestScoreEl = document.getElementById("progressLatestScore");
+
+  // Latest score card always reflects the most recent attempt
+  if (latestScoreEl) {
+    latestScoreEl.textContent = records.length ? records[records.length - 1].percent : 0;
+  }
+
   if (!canvas) return;
   const ctx = canvas.getContext("2d");
+
+  if (records.length === 0) {
+    canvas.style.display = "none";
+    if (noDataEl) noDataEl.style.display = "block";
+    return;
+  }
+  canvas.style.display = "block";
+  if (noDataEl) noDataEl.style.display = "none";
 
   // Match canvas resolution to its displayed CSS size for a crisp draw
   const dpr = window.devicePixelRatio || 1;
   const cssWidth = canvas.clientWidth || 320;
-  const cssHeight = canvas.clientHeight || 180;
+  const cssHeight = canvas.clientHeight || 260;
   canvas.width = cssWidth * dpr;
   canvas.height = cssHeight * dpr;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.scale(dpr, dpr);
   ctx.clearRect(0, 0, cssWidth, cssHeight);
 
-  const nameLabel = document.getElementById("progressUserName");
-  if (nameLabel) nameLabel.textContent = userName || "Friend";
+  const leftPad = 34;   // room for the rotated y-axis label
+  const rightPad = 16;
+  const topPad = 30;    // room for the top-most circle
+  const bottomPad = 34; // room for x-axis + "Attempt" label
+  const w = cssWidth - leftPad - rightPad;
+  const h = cssHeight - topPad - bottomPad;
+  const baseY = topPad + h; // the x-axis line (score = 0)
+  const radius = 22;
 
-  const bestEl = document.getElementById("progressBest");
-  const avgEl = document.getElementById("progressAvg");
-  const countEl = document.getElementById("progressCount");
-
-  if (records.length === 0) {
-    ctx.fillStyle = "#999";
-    ctx.font = "14px 'Albert Sans', sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("No practice sessions yet — try a mission!", cssWidth / 2, cssHeight / 2);
-    if (bestEl) bestEl.textContent = "--";
-    if (avgEl) avgEl.textContent = "--";
-    if (countEl) countEl.textContent = "0";
-    return;
-  }
-
-  const percents = records.map(r => r.percent);
-  const best = Math.max(...percents);
-  const avg = Math.round(percents.reduce((a, b) => a + b, 0) / percents.length);
-
-  if (bestEl) bestEl.textContent = best + "%";
-  if (avgEl) avgEl.textContent = avg + "%";
-  if (countEl) countEl.textContent = records.length;
-
-  const padding = 28;
-  const w = cssWidth - padding * 2;
-  const h = cssHeight - padding * 2;
-
-  // gridlines + y-axis labels (0/25/50/75/100%)
-  ctx.strokeStyle = "#eee";
-  ctx.lineWidth = 1;
-  ctx.fillStyle = "#aaa";
-  ctx.font = "10px 'Albert Sans', sans-serif";
-  ctx.textAlign = "right";
-  for (let i = 0; i <= 4; i++) {
-    const y = padding + h - (h * i) / 4;
-    ctx.beginPath();
-    ctx.moveTo(padding, y);
-    ctx.lineTo(padding + w, y);
-    ctx.stroke();
-    ctx.fillText(i * 25 + "%", padding - 6, y + 3);
-  }
-
-  // the line connecting each attempt's accuracy
-  ctx.strokeStyle = "#F25C3B";
-  ctx.lineWidth = 3;
+  // y-axis line
+  ctx.strokeStyle = "rgba(255,255,255,0.6)";
+  ctx.lineWidth = 1.5;
   ctx.beginPath();
-  records.forEach((r, i) => {
-    const x = records.length === 1 ? padding + w / 2 : padding + (w * i) / (records.length - 1);
-    const y = padding + h - (h * Math.min(r.percent, 100)) / 100;
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  });
+  ctx.moveTo(leftPad, topPad - 10);
+  ctx.lineTo(leftPad, baseY);
+  ctx.lineTo(leftPad + w, baseY);
   ctx.stroke();
 
-  // a dot for each attempt
-  ctx.fillStyle = "#F25C3B";
+  // rotated "Compression Score" y-axis label
+  ctx.save();
+  ctx.fillStyle = "rgba(255,255,255,0.9)";
+  ctx.font = "11px 'Albert Sans', sans-serif";
+  ctx.textAlign = "center";
+  ctx.translate(12, topPad + h / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText("Compression Score", 0, 0);
+  ctx.restore();
+
+  // "Attempt" x-axis label
+  ctx.fillStyle = "rgba(255,255,255,0.9)";
+  ctx.font = "12px 'Albert Sans', sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText("Attempt", leftPad + w / 2, cssHeight - 6);
+
+  const n = records.length;
+  const step = n === 1 ? w / 2 : w / n;
+
   records.forEach((r, i) => {
-    const x = records.length === 1 ? padding + w / 2 : padding + (w * i) / (records.length - 1);
-    const y = padding + h - (h * Math.min(r.percent, 100)) / 100;
+    const x = leftPad + step * i + step / 2;
+    const scoreHeight = (h - radius - 8) * (Math.min(r.percent, 100) / 100);
+    const y = baseY - scoreHeight - radius;
+    const color = r.percent >= 80 ? "#038660" : "#FF5058";
+
+    // stem from axis up to the circle
+    ctx.strokeStyle = "rgba(255,255,255,0.85)";
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(x, y, 4, 0, Math.PI * 2);
+    ctx.moveTo(x, baseY);
+    ctx.lineTo(x, y + radius);
+    ctx.stroke();
+
+    // circle
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fillStyle = color;
     ctx.fill();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "#ffffff";
+    ctx.stroke();
+
+    // score label inside circle, e.g. "90/100"
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 11px 'Albert Sans', sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(r.percent + "/100", x, y);
+    ctx.textBaseline = "alphabetic";
+
+    // attempt number under the axis
+    ctx.fillStyle = "rgba(255,255,255,0.9)";
+    ctx.font = "11px 'Albert Sans', sans-serif";
+    ctx.fillText(i + 1, x, baseY + 16);
   });
 }
 // setup question function 
