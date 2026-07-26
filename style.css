@@ -8,7 +8,8 @@ html, body {
 
 .screen {
   width: 100vw;
-  height: 100vh;
+  height: 100vh;    /* fallback for browsers without dvh support */
+  height: 100dvh;   /* matches the real visible viewport on Chrome mobile, where 100vh includes space behind the address bar */
   background: #F25C3B;   /* your orange background */
   display: flex;
   flex-direction: column;
@@ -200,7 +201,8 @@ display: flex;
    absolute positioning above for just these two buttons. */
 .sealedActionsRow {
   position: absolute;
-  bottom: 6vh;
+  bottom: 12vh;    /* fallback for browsers without dvh support */
+  bottom: 12dvh;   /* accounts for Chrome's address bar so buttons stay visible */
   left: 0;
   width: 100%;
   display: flex;
