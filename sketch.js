@@ -308,8 +308,8 @@ function renderProgressChart() {
     const stem = document.createElement("div");
     stem.className = "chartStem";
     stem.style.left = x + "px";
-    stem.style.bottom = "0px";
-    stem.style.height = centerBottom + "px";
+    stem.style.bottom = CHART_BASELINE_OFFSET + "px";
+    stem.style.height = (centerBottom - CHART_BASELINE_OFFSET) + "px";
     track.appendChild(stem);
 
     const point = document.createElement("div");
