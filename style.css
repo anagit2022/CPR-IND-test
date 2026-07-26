@@ -193,6 +193,32 @@ display: flex;
     cursor: pointer;
     z-index: 10; 
 }
+
+/* The two live "practice again" screens (Raja & Rani) place the
+   practice-again button and the check-progress button together in
+   a centered row so they never overlap. This overrides the
+   absolute positioning above for just these two buttons. */
+.sealedActionsRow {
+  position: absolute;
+  bottom: 6vh;
+  left: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  z-index: 10;
+}
+.sealedActionsRow #practiceagainbtnraja,
+.sealedActionsRow #practiceagainbtnrani {
+  position: static;
+  bottom: auto;
+  right: auto;
+  width: 45%;
+  max-width: 160px;
+}
 /* ==============================
    QUESTION SCREEN
    ============================== */
@@ -759,11 +785,9 @@ left: 5vw; }
    (sits next to the "Practice Again" button)
    ======================================== */
 .checkProgressBtn {
-  position: absolute;
-  bottom: 15vh;
-  left: 8vw;
-  width: 100%;
-  max-width: 170px;
+  position: static;
+  width: 45%;
+  max-width: 160px;
   padding: 14px 10px;
   background: #FFFFFF;
   color: #F25C3B;
@@ -774,9 +798,9 @@ left: 5vw; }
   border-radius: 30px;
   cursor: pointer;
   user-select: none;
-  z-index: 10;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
   transition: transform 0.15s ease;
+  box-sizing: border-box;
 }
 
 .checkProgressBtn:active {
@@ -787,76 +811,97 @@ left: 5vw; }
    PROGRESS SCREEN
    ======================================== */
 #progressScreen {
-  padding: 20px;
+  padding: 0;
   box-sizing: border-box;
-}
-
-.progressCard {
-  background: #fff;
-  border-radius: 22px;
-  padding: 24px 20px;
-  width: 88vw;
-  max-width: 380px;
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
   align-items: center;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  justify-content: flex-start;
 }
 
-.progressCardTitle {
-  font-family: 'Albert Sans', sans-serif;
+.progressHeading {
+  position: absolute;
+  top: 6vh;
+  left: 8vw;
+  width: 84vw;
+  color: #FFF;
+  font-family: "Albert Sans", sans-serif;
+  font-size: 30px;
   font-weight: 700;
-  font-size: 18px;
-  color: #F25C3B;
-  margin-bottom: 16px;
-  text-align: center;
+  line-height: 1.25;
+}
+
+.progressLatestCard {
+  position: absolute;
+  top: 24vh;
+  left: 8vw;
+  width: 84vw;
+  max-width: 340px;
+  background: #fff;
+  border-radius: 18px;
+  padding: 18px 22px;
+  box-sizing: border-box;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+}
+
+.progressLatestLabel {
+  font-family: 'Albert Sans', sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  color: #222;
+  margin-bottom: 6px;
+}
+
+.progressLatestValue {
+  font-family: 'Albert Sans', sans-serif;
+  font-size: 34px;
+  font-weight: 700;
+  color: #038660;
+}
+
+.progressLatestValue .progressLatestDenom {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.progressChartWrap {
+  position: absolute;
+  top: 42vh;
+  left: 8vw;
+  width: 84vw;
+  max-width: 340px;
+  height: 40vh;
+  max-height: 300px;
 }
 
 #progressChartCanvas {
   width: 100%;
-  max-width: 320px;
-  height: 180px;
+  height: 100%;
   display: block;
 }
 
-.progressStats {
-  display: flex;
-  justify-content: space-between;
-  width: 100%;
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid #eee;
-}
-
-.progressStat {
+.progressNoData {
+  position: absolute;
+  top: 42vh;
+  left: 8vw;
+  width: 84vw;
+  max-width: 340px;
   text-align: center;
-  flex: 1;
-}
-
-.progressStatValue {
+  color: rgba(255, 255, 255, 0.85);
   font-family: 'Albert Sans', sans-serif;
-  font-size: 22px;
-  font-weight: 700;
-  color: #F25C3B;
-}
-
-.progressStatLabel {
-  font-family: 'Albert Sans', sans-serif;
-  font-size: 11px;
-  color: #888;
-  margin-top: 2px;
+  font-size: 15px;
 }
 
 .progressBackBtn {
-  margin-top: 22px;
-  background: #F25C3B;
-  color: #fff;
-  padding: 12px 32px;
+  position: absolute;
+  bottom: 6vh;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #B6DB54;
+  color: #7C9C3D;
+  padding: 14px 46px;
   border-radius: 30px;
   font-family: 'Albert Sans', sans-serif;
   font-weight: 700;
-  font-size: 15px;
+  font-size: 16px;
   cursor: pointer;
   user-select: none;
 }
