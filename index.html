@@ -1973,7 +1973,14 @@
 
       <div class="progressChartWrap">
 
-        <canvas id="progressChartCanvas"></canvas>
+        <div class="progressChartScroll" id="progressChartScroll">
+          <canvas id="progressChartCanvas"></canvas>
+        </div>
+
+        <div class="progressChartArrow progressChartArrowLeft" id="progressChartArrowLeft">&#8249;</div>
+        <div class="progressChartArrow progressChartArrowRight" id="progressChartArrowRight">&#8250;</div>
+
+        <div class="progressTooltip" id="progressTooltip"></div>
 
       </div>
 
@@ -1981,7 +1988,13 @@
         No practice sessions yet — try a mission!
       </div>
 
-      <div class="progressBackBtn" id="progressBackBtn">Back</div>
+      <div class="progressFooter">
+
+        <div class="progressBackBtn" id="progressBackBtn">Back</div>
+
+        <div class="progressClearBtn" id="progressClearBtn">Clear my progress</div>
+
+      </div>
 
     </div>
 
