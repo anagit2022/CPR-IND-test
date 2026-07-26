@@ -142,7 +142,7 @@ display: flex;
 }
 #dpromiseinstruc,#dpromisepress,#dpromiseseal,#dranipromisepress,#rranipromisepress,#rrajapromisepress,#bpromisepress,#branipromisepress,#wranipromisepress,#wpromisepress {
   position: absolute;
-  bottom: 7vh;       /* distance from top */
+  bottom: 2vh;       /* distance from top */
   right: 10vw;     /* distance from right */
   width: 20vw   /* responsive size */
   justify-content: center;
