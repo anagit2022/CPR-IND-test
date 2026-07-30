@@ -1122,12 +1122,17 @@ postq7Next.addEventListener("touchstart", handlePostQ7Next);
         awake.style.display = "none";
         checkbreathing.style.display = "flex";
         console.log(breath_no);
+        const breathFaceImg = document.getElementById("breathFaceImg");
         if (breath_no % 3 === 0) {
             gasp_aud.play();
+            if (breathFaceImg) breathFaceImg.src = "gasping.gif";
             console.log(10);
         } else if (breath_no % 5 === 0) {
             normal_breath_aud.play();
+            if (breathFaceImg) breathFaceImg.src = "faceonly.png";
             console.log(20);
+        } else {
+            if (breathFaceImg) breathFaceImg.src = "faceonly.png";
         }
         setTimeout(() => {
             checkbreathing.style.display = "none";
@@ -1135,6 +1140,7 @@ postq7Next.addEventListener("touchstart", handlePostQ7Next);
             couldobserveb.play();
             gasp_aud.stop();
             normal_breath_aud.stop();
+            if (breathFaceImg) breathFaceImg.src = "faceonly.png";
         }, 10000);
       
     };
@@ -1718,7 +1724,7 @@ function mousePressed() {
 
 function playScreen() {
     image(playimg, width / 2, height / 2);
-    //image(heartimg, width * 0.9, height * 0.08);
+    image(heartimg, width * 0.9, height * 0.08);
 
     push();
     noStroke();
