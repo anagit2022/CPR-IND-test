@@ -232,7 +232,7 @@ function formatFullDateTime(dateStr) {
 }
 
 const CHART_BASELINE_OFFSET = 20; // px reserved below the baseline for attempt numbers
-const CHART_TOP_GAP = 34;         // px reserved above the tallest point for its date label
+const CHART_TOP_GAP = 50;         // px reserved above the tallest point for its date label
 const CHART_POINT_RADIUS = 22;    // px, half the circle's 44px diameter
 
 // Builds a lollipop chart of the learner's compression accuracy
