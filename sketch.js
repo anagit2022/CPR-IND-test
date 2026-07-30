@@ -1718,7 +1718,7 @@ function mousePressed() {
 
 function playScreen() {
     image(playimg, width / 2, height / 2);
-    image(heartimg, width * 0.9, height * 0.08);
+    //image(heartimg, width * 0.9, height * 0.08);
 
     push();
     noStroke();
@@ -1772,9 +1772,11 @@ function playScreen() {
     translate(108, 50);
     rotate(-HALF_PI);
     textAlign(CENTER, TOP);
-    textSize(9);
+    textSize(11);
+    textStyle(BOLD);
     fill(0);
     text("Presses per minute", 0, 0);
+    textStyle(NORMAL);
     pop();
 
     progress -= 1;
@@ -1792,9 +1794,11 @@ function playScreen() {
     translate(346, 50);
     rotate(-HALF_PI);
     textAlign(CENTER, TOP);
-    textSize(9);
+    textSize(11);
+    textStyle(BOLD);
     fill(0);
     text("Blood flow", 0, 0);
+    textStyle(NORMAL);
     pop();
 
     cheekOpacity = map(progress, 6, 210, 40, 255);
