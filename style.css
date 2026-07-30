@@ -710,7 +710,6 @@ left: 5vw; }
     width: 14vw;             /* responsive */
     height: 14vw;            /* responsive */
     max-width: 90px;         /* optional safety limit */
-    max-height: 90px;
     font-size: 7vw;          /* responsive */
     cursor: pointer;
 
