@@ -232,7 +232,7 @@ function formatFullDateTime(dateStr) {
 }
 
 const CHART_BASELINE_OFFSET = 20; // px reserved below the baseline for attempt numbers
-const CHART_TOP_GAP = 50;         // px reserved above the tallest point for its date label
+const CHART_TOP_GAP = 50;         // px reserved above the tallest point for its date label (must clear point radius + label height)
 const CHART_POINT_RADIUS = 22;    // px, half the circle's 44px diameter
 
 // Builds a lollipop chart of the learner's compression accuracy
@@ -1890,14 +1890,14 @@ function handle_performance() {
             ambaud.play();
             winaud.play();
 
-        } else if (diffGoal >= 20) {
+        } else {
             if (fastcount > slowcount) {
                 currentState = "latefast";
                 gameOutcome = "latefast";
                 p5Screen.style.display = "none";
                 latefast.style.display = "flex";
                 lateaud.play();
-            } else if (slowcount > fastcount) {
+            } else {
                 currentState = "lateslow";
                 gameOutcome = "lateslow";
                 p5Screen.style.display = "none";
