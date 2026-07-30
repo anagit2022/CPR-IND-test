@@ -1767,6 +1767,16 @@ function playScreen() {
     image(arrowimg, 0, 0);
     pop();
 
+    push();
+    angleMode(RADIANS);
+    translate(108, 50);
+    rotate(-HALF_PI);
+    textAlign(CENTER, TOP);
+    textSize(9);
+    fill(0);
+    text("Presses per minute", 0, 0);
+    pop();
+
     progress -= 1;
     console.log(progress);
     progress = constrain(progress, 6, 200);
@@ -1775,6 +1785,16 @@ function playScreen() {
     noStroke();
     fill("#FF5058");
     rect(332, 44, -progress, 11, 11);
+    pop();
+
+    push();
+    angleMode(RADIANS);
+    translate(346, 50);
+    rotate(-HALF_PI);
+    textAlign(CENTER, TOP);
+    textSize(9);
+    fill(0);
+    text("Blood flow", 0, 0);
     pop();
 
     cheekOpacity = map(progress, 6, 210, 40, 255);
