@@ -236,11 +236,10 @@ const CHART_TOP_GAP = 34;         // px reserved above the tallest point for its
 const CHART_POINT_RADIUS = 22;    // px, half the circle's 44px diameter
 
 // Builds a lollipop chart of the learner's compression accuracy
-// (normalized to a score out of 100) for each practice attempt, using
-// plain positioned DOM elements (not canvas) so it scrolls, sizes, and
-// hit-tests reliably across devices. Attempts are spaced at a fixed
-// width so points never overlap — the track just grows wider and
-// becomes horizontally scrollable instead.
+// for each practice attempt, using plain positioned DOM elements (not
+// canvas) so it scrolls, sizes, and hit-tests reliably across devices.
+// Attempts are spaced at a fixed width so points never overlap — the
+// track just grows wider and becomes horizontally scrollable instead.
 function renderProgressChart() {
   const records = getUserProgress();
   const track = document.getElementById("progressChartTrack");
@@ -248,6 +247,7 @@ function renderProgressChart() {
   const chartWrap = document.getElementById("progressChartWrap");
   const noDataEl = document.getElementById("progressNoData");
   const latestScoreEl = document.getElementById("progressLatestScore");
+  const latestDenomEl = document.getElementById("progressLatestDenom");
   const arrowLeft = document.getElementById("progressChartArrowLeft");
   const arrowRight = document.getElementById("progressChartArrowRight");
   const tooltip = document.getElementById("progressTooltip");
@@ -256,9 +256,13 @@ function renderProgressChart() {
 
   if (tooltip) tooltip.style.display = "none";
 
-  // Latest score card always reflects the most recent attempt
+  // Latest score card always reflects the most recent attempt — shown as
+  // the actual good compressions out of that session's target, not a
+  // normalized-to-100 percentage.
   if (latestScoreEl) {
-    latestScoreEl.textContent = records.length ? records[records.length - 1].percent : 0;
+    const latest = records.length ? records[records.length - 1] : null;
+    latestScoreEl.textContent = latest ? latest.score : 0;
+    if (latestDenomEl) latestDenomEl.textContent = "/" + (latest ? latest.max : 0);
   }
 
   if (!track || !scrollWrap || !chartWrap) return;
@@ -301,9 +305,13 @@ function renderProgressChart() {
 
   records.forEach((r, i) => {
     const x = CHART_ATTEMPT_STEP * i + CHART_ATTEMPT_STEP / 2;
+    // Height on the chart is still normalized (0–100%) so attempts with
+    // different targets sit on the same visual scale, but everything the
+    // learner actually reads shows their real good_compression/maxTotalCompressions.
     const scoreOffset = usableHeight * (Math.min(r.percent, 100) / 100);
     const centerBottom = CHART_BASELINE_OFFSET + CHART_POINT_RADIUS + scoreOffset;
-    const color = r.percent >= 80 ? "#038660" : "#FF5058";
+    const diff = Math.abs(r.max - r.score);
+    const color = diff <= 10 ? "#038660" : "#FF5058";
 
     const stem = document.createElement("div");
     stem.className = "chartStem";
@@ -317,7 +325,7 @@ function renderProgressChart() {
     point.style.left = x + "px";
     point.style.bottom = centerBottom + "px";
     point.style.background = color;
-    point.textContent = r.percent + "/100";
+    point.textContent = r.score + "/" + r.max;
     const onTap = (e) => { e.preventDefault(); showChartTooltip(point, r); };
     point.addEventListener("click", onTap);
     point.addEventListener("touchend", onTap);
@@ -353,7 +361,7 @@ function showChartTooltip(pointEl, record) {
   if (!tooltip || !chartWrap) return;
   const pointRect = pointEl.getBoundingClientRect();
   const wrapRect = chartWrap.getBoundingClientRect();
-  tooltip.textContent = formatFullDateTime(record.date) + " · " + record.percent + "/100";
+  tooltip.textContent = formatFullDateTime(record.date) + " · " + record.score + "/" + record.max;
   tooltip.style.left = (pointRect.left - wrapRect.left + pointRect.width / 2) + "px";
   tooltip.style.top = (pointRect.top - wrapRect.top) + "px";
   tooltip.style.display = "block";
