@@ -1724,7 +1724,7 @@ function mousePressed() {
 
 function playScreen() {
     image(playimg, width / 2, height / 2);
-    image(heartimg, width * 0.9, height * 0.08);
+    //image(heartimg, width * 0.9, height * 0.08);
 
     push();
     noStroke();
@@ -1775,13 +1775,13 @@ function playScreen() {
 
     push();
     angleMode(RADIANS);
-    translate(108, 50);
+    translate(106, 50);
     rotate(-HALF_PI);
     textAlign(CENTER, TOP);
     textSize(11);
     textStyle(BOLD);
     fill(0);
-    text("Presses per minute", 0, 0);
+    text("BPM", 0, 0);
     textStyle(NORMAL);
     pop();
 
