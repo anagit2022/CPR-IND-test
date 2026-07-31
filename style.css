@@ -678,7 +678,7 @@ left: 5vw; }
     justify-content: center;
     gap: 3vw;       /* responsive spacing */
     position: absolute;
-    bottom: 16vh;
+    bottom: 6vh;
   margin-top: 10vh;
 }
 
