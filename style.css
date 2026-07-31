@@ -135,7 +135,7 @@ display: flex;
 }
 #nextprBtn,#nextaBtn,#nextc1,#nextc2,#nextc3,#nextc4{
   position: absolute;
-  bottom: 14vh;       /* distance from top */
+  bottom: 6vh;       /* distance from top */
   right: 10vw;     /* distance from right */
   width: 20vw   /* responsive size */
   cursor: pointer;
