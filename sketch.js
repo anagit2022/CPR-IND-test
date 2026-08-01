@@ -1,6 +1,11 @@
 let userName = "";        // learner's name, used to track their progress
 let scoreLoggedForAttempt = false;  // guards against logging the same attempt multiple times
 const CHART_ATTEMPT_STEP = 92;   // fixed px spacing between attempts in the progress chart
+const CHART_MIN_STEP = 36;          // px, minimum spacing between points before the "all" view needs to scroll
+const CHART_RECENT_COUNT = 7;       // number of attempts shown in "recent" (zoomed-in) mode
+let chartMode = "recent";           // "recent" | "all" — toggled by the chart's view buttons
+const CHART_OVERFLOW_TOLERANCE = 20; // px of "overflow" small enough to just treat as a perfect fit
+let lastChartVisibleWidth = 0;       // px, remembered so the arrow buttons can scroll by a sensible page amount
 let genderState = null;   // 1 = Raja, 0 = Rani
 // pre question answers
 let preAnswers = {
@@ -27,6 +32,7 @@ let mic;
 let listeningForResponse = false;
 let responseTimeout = null;
 let breath_no ;
+let breathTimerInterval = null; // holds the setInterval id for the checkbreathing countdown badge
 let dialedNumber = ''; // <-- Dial Pad Variable
 let t1, t2, t3, t4, t5,t6;
 let canvas;
@@ -232,46 +238,58 @@ function formatFullDateTime(dateStr) {
 }
 
 const CHART_BASELINE_OFFSET = 20; // px reserved below the baseline for attempt numbers
-const CHART_TOP_GAP = 50;         // px reserved above the tallest point for its date label (must clear point radius + label height)
-const CHART_POINT_RADIUS = 22;    // px, half the circle's 44px diameter
+const CHART_TOP_PADDING = 16;     // px reserved above the 100% line for the topmost point's radius
+const CHART_GUTTER_WIDTH = 46;    // px reserved on the left for the axis title + number column
 
-// Builds a lollipop chart of the learner's compression accuracy
-// for each practice attempt, using plain positioned DOM elements (not
-// canvas) so it scrolls, sizes, and hit-tests reliably across devices.
-// Attempts are spaced at a fixed width so points never overlap — the
-// track just grows wider and becomes horizontally scrollable instead.
+// Builds a line chart of each attempt's compression accuracy as a
+// percentage (good_compression / maxTotalCompressions * 100) plotted
+// against a fixed 0–100 axis with gridlines, using plain positioned DOM
+// elements (not canvas) so it scrolls, sizes, and hit-tests reliably
+// across devices. Attempts are spaced at a fixed width so points never
+// overlap — the track just grows wider and becomes horizontally
+// scrollable instead, while the y-axis numbers stay fixed.
 function renderProgressChart() {
-  const records = getUserProgress();
+  const allRecords = getUserProgress();
   const track = document.getElementById("progressChartTrack");
   const scrollWrap = document.getElementById("progressChartScroll");
   const chartWrap = document.getElementById("progressChartWrap");
   const noDataEl = document.getElementById("progressNoData");
   const latestScoreEl = document.getElementById("progressLatestScore");
   const latestDenomEl = document.getElementById("progressLatestDenom");
+  const latestValueEl = document.getElementById("progressLatestValue");
   const arrowLeft = document.getElementById("progressChartArrowLeft");
   const arrowRight = document.getElementById("progressChartArrowRight");
   const tooltip = document.getElementById("progressTooltip");
   const yLabel = document.querySelector(".progressChartYLabel");
   const xLabel = document.querySelector(".progressChartXLabel");
+  const axisNums = document.getElementById("progressChartAxisNums");
 
   if (tooltip) tooltip.style.display = "none";
 
   // Latest score card always reflects the most recent attempt — shown as
-  // the actual good compressions out of that session's target, not a
-  // normalized-to-100 percentage.
+  // the actual good compressions out of that session's target, and
+  // colored to match the same pass/fail logic as the chart points and
+  // badges (green within 10 of target, red otherwise) instead of a
+  // fixed color.
   if (latestScoreEl) {
-    const latest = records.length ? records[records.length - 1] : null;
+    const latest = allRecords.length ? allRecords[allRecords.length - 1] : null;
     latestScoreEl.textContent = latest ? latest.score : 0;
     if (latestDenomEl) latestDenomEl.textContent = "/" + (latest ? latest.max : 0);
+    if (latestValueEl) {
+      const latestDiff = latest ? Math.abs(latest.max - latest.score) : 0;
+      latestValueEl.style.color = (!latest || latestDiff <= 10) ? "#038660" : "#FF5058";
+    }
   }
 
   if (!track || !scrollWrap || !chartWrap) return;
   track.innerHTML = "";
+  if (axisNums) axisNums.innerHTML = "";
 
-  if (records.length === 0) {
+  if (allRecords.length === 0) {
     scrollWrap.style.display = "none";
     if (yLabel) yLabel.style.display = "none";
     if (xLabel) xLabel.style.display = "none";
+    if (axisNums) axisNums.style.display = "none";
     if (arrowLeft) arrowLeft.style.display = "none";
     if (arrowRight) arrowRight.style.display = "none";
     if (noDataEl) noDataEl.style.display = "block";
@@ -280,12 +298,33 @@ function renderProgressChart() {
   scrollWrap.style.display = "block";
   if (yLabel) yLabel.style.display = "flex";
   if (xLabel) xLabel.style.display = "block";
+  if (axisNums) axisNums.style.display = "block";
   if (noDataEl) noDataEl.style.display = "none";
+
+  // "recent" mode shows only the last CHART_RECENT_COUNT attempts,
+  // spaced to exactly fill the visible width (a "zoomed in" view that
+  // never needs scrolling). "all" mode shows every attempt — spaced to
+  // fill the width too when there aren't many, but falling back to a
+  // fixed minimum spacing (and horizontal scroll) once there are enough
+  // attempts that any smaller spacing would make the points illegible.
+  const displayRecords = chartMode === "recent"
+    ? allRecords.slice(-CHART_RECENT_COUNT)
+    : allRecords;
+  const indexOffset = allRecords.length - displayRecords.length;
 
   const wrapRect = chartWrap.getBoundingClientRect();
   const trackHeight = Math.max(Math.round(wrapRect.height) - CHART_BASELINE_OFFSET, 140);
-  const scrollVisibleWidth = Math.round(wrapRect.width) - 26; // minus the y-label gutter
-  const contentWidth = Math.max(scrollVisibleWidth, CHART_ATTEMPT_STEP * records.length + 20);
+  const scrollVisibleWidth = Math.round(wrapRect.width) - CHART_GUTTER_WIDTH;
+  const step = chartMode === "recent"
+    ? scrollVisibleWidth / displayRecords.length
+    : Math.max(CHART_MIN_STEP, scrollVisibleWidth / displayRecords.length);
+  // A few px of "overflow" from rounding/clamping isn't worth scrolling for —
+  // treat anything under CHART_OVERFLOW_TOLERANCE as a perfect fit so the
+  // arrows don't appear (and can't cause a jarring near-zero-range jump).
+  const rawContentWidth = step * displayRecords.length;
+  const overflowing = rawContentWidth > scrollVisibleWidth + CHART_OVERFLOW_TOLERANCE;
+  const contentWidth = overflowing ? rawContentWidth : scrollVisibleWidth;
+  lastChartVisibleWidth = scrollVisibleWidth;
 
   track.style.width = contentWidth + "px";
   track.style.height = trackHeight + "px";
@@ -301,52 +340,83 @@ function renderProgressChart() {
   axisV.style.top = "0px";
   track.appendChild(axisV);
 
-  const usableHeight = Math.max(trackHeight - CHART_BASELINE_OFFSET - CHART_TOP_GAP - CHART_POINT_RADIUS, 40);
+  // usableHeight spans the full 0–100% range on the fixed axis: from the
+  // baseline (0%) up to CHART_TOP_PADDING below the track's top edge,
+  // which leaves just enough room for a point sitting exactly at 100%
+  // not to get clipped by the track's own bounds.
+  const usableHeight = Math.max(trackHeight - CHART_BASELINE_OFFSET - CHART_TOP_PADDING, 40);
 
-  records.forEach((r, i) => {
-    const x = CHART_ATTEMPT_STEP * i + CHART_ATTEMPT_STEP / 2;
-    // Height on the chart is still normalized (0–100%) so attempts with
-    // different targets sit on the same visual scale, but everything the
-    // learner actually reads shows their real good_compression/maxTotalCompressions.
-    const scoreOffset = usableHeight * (Math.min(r.percent, 100) / 100);
-    const centerBottom = CHART_BASELINE_OFFSET + CHART_POINT_RADIUS + scoreOffset;
+  // Gridlines + their matching fixed y-axis numbers, every 10%. axisNums
+  // shares the exact same top/bottom box as the track, so a number's
+  // "bottom" offset lines up with its gridline even while the track
+  // itself scrolls horizontally underneath.
+  for (let k = 0; k <= 10; k++) {
+    const bottomPx = CHART_BASELINE_OFFSET + (k / 10) * usableHeight;
+
+    const gridline = document.createElement("div");
+    gridline.className = "chartGridLine";
+    gridline.style.bottom = bottomPx + "px";
+    track.appendChild(gridline);
+
+    if (axisNums) {
+      const num = document.createElement("div");
+      num.className = "chartAxisNumber";
+      num.style.bottom = bottomPx + "px";
+      num.textContent = k * 10;
+      axisNums.appendChild(num);
+    }
+  }
+
+  // Precompute each point's position — "bottom" (for the point/gridline
+  // coordinate system) and "top" (for the line-segment angle math below,
+  // where standard rotate() degrees assume a top-left origin).
+  const points = displayRecords.map((r, i) => {
+    const x = step * i + step / 2;
+    const pct = Math.min(Math.max(r.percent, 0), 100);
+    const bottomPx = CHART_BASELINE_OFFSET + (pct / 100) * usableHeight;
+    return { x, bottomPx, topPx: trackHeight - bottomPx, record: r };
+  });
+
+  // Connecting line segments, drawn first so the points sit on top of them.
+  for (let i = 0; i < points.length - 1; i++) {
+    const p1 = points[i], p2 = points[i + 1];
+    const dx = p2.x - p1.x;
+    const dy = p2.topPx - p1.topPx;
+    const length = Math.sqrt(dx * dx + dy * dy);
+    const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+
+    const seg = document.createElement("div");
+    seg.className = "chartLineSeg";
+    seg.style.left = p1.x + "px";
+    seg.style.top = p1.topPx + "px";
+    seg.style.width = length + "px";
+    seg.style.transform = "rotate(" + angle + "deg)";
+    track.appendChild(seg);
+  }
+
+  points.forEach((p, i) => {
+    const r = p.record;
     const diff = Math.abs(r.max - r.score);
     const color = diff <= 10 ? "#038660" : "#FF5058";
 
-    const stem = document.createElement("div");
-    stem.className = "chartStem";
-    stem.style.left = x + "px";
-    stem.style.bottom = CHART_BASELINE_OFFSET + "px";
-    stem.style.height = (centerBottom - CHART_BASELINE_OFFSET) + "px";
-    track.appendChild(stem);
-
     const point = document.createElement("div");
     point.className = "chartPoint";
-    point.style.left = x + "px";
-    point.style.bottom = centerBottom + "px";
+    point.style.left = p.x + "px";
+    point.style.bottom = p.bottomPx + "px";
     point.style.background = color;
-    point.textContent = r.score + "/" + r.max;
     const onTap = (e) => { e.preventDefault(); showChartTooltip(point, r); };
     point.addEventListener("click", onTap);
     point.addEventListener("touchend", onTap);
     track.appendChild(point);
 
-    const dateLabel = document.createElement("div");
-    dateLabel.className = "chartDateLabel";
-    dateLabel.style.left = x + "px";
-    dateLabel.style.bottom = (centerBottom + CHART_POINT_RADIUS + 6) + "px";
-    dateLabel.textContent = formatRelativeLabel(r.date);
-    track.appendChild(dateLabel);
-
     const attemptLabel = document.createElement("div");
     attemptLabel.className = "chartAttemptLabel";
-    attemptLabel.style.left = x + "px";
+    attemptLabel.style.left = p.x + "px";
     attemptLabel.style.bottom = "2px";
-    attemptLabel.textContent = i + 1;
+    attemptLabel.textContent = indexOffset + i + 1; // real attempt number, not reset per view
     track.appendChild(attemptLabel);
   });
 
-  const overflowing = contentWidth > scrollVisibleWidth + 1;
   if (arrowLeft) arrowLeft.style.display = overflowing ? "flex" : "none";
   if (arrowRight) arrowRight.style.display = overflowing ? "flex" : "none";
 
@@ -439,6 +509,8 @@ window.onload = () => {
   const progressChartScroll = document.getElementById("progressChartScroll");
   const progressChartArrowLeft = document.getElementById("progressChartArrowLeft");
   const progressChartArrowRight = document.getElementById("progressChartArrowRight");
+  const progressChartModeRecent = document.getElementById("progressChartModeRecent");
+  const progressChartModeAll = document.getElementById("progressChartModeAll");
   const progressTooltip = document.getElementById("progressTooltip");
   const preq1 = document.getElementById("preq1");
   const preq1input = document.getElementById("preq1input");
@@ -1123,6 +1195,15 @@ postq7Next.addEventListener("touchstart", handlePostQ7Next);
         checkbreathing.style.display = "flex";
         console.log(breath_no);
         const breathFaceImg = document.getElementById("breathFaceImg");
+        const breathTimerEl = document.getElementById("breathTimerNumber");
+        let breathTimerCount = 10;
+        if (breathTimerEl) breathTimerEl.textContent = breathTimerCount;
+        clearInterval(breathTimerInterval);
+        breathTimerInterval = setInterval(() => {
+            breathTimerCount -= 1;
+            if (breathTimerEl) breathTimerEl.textContent = Math.max(breathTimerCount, 0);
+            if (breathTimerCount <= 0) clearInterval(breathTimerInterval);
+        }, 1000);
         if (breath_no % 3 === 0) {
             gasp_aud.play();
             if (breathFaceImg) breathFaceImg.src = "gasping.gif";
@@ -1141,6 +1222,7 @@ postq7Next.addEventListener("touchstart", handlePostQ7Next);
             gasp_aud.stop();
             normal_breath_aud.stop();
             if (breathFaceImg) breathFaceImg.src = "faceonly.png";
+            clearInterval(breathTimerInterval);
         }, 10000);
       
     };
@@ -1149,6 +1231,8 @@ postq7Next.addEventListener("touchstart", handlePostQ7Next);
 
     const handleBno = () => {
         requestaedaud.play();
+        could_you_see_breathing.pause();
+        could_you_see_breathing.currentTime = 0;
         checkbreathingq.style.display = "none";
         requestaed.style.display = "flex";
       
@@ -1438,10 +1522,30 @@ postq7Next.addEventListener("touchstart", handlePostQ7Next);
     const openProgress = (fromScreen) => {
         hideAllScreens();
         progressScreen.style.display = "flex";
+        // Always start on the "recent" (zoomed-in) view for a predictable
+        // default each time the screen opens.
+        chartMode = "recent";
+        if (progressChartModeRecent) progressChartModeRecent.classList.add("active");
+        if (progressChartModeAll) progressChartModeAll.classList.remove("active");
         // Defer to the next frame so the browser has definitely laid out
         // the now-visible screen before we measure it for the chart.
         requestAnimationFrame(() => renderProgressChart());
     };
+
+    const setChartMode = (mode) => {
+        chartMode = mode;
+        if (progressChartModeRecent) progressChartModeRecent.classList.toggle("active", mode === "recent");
+        if (progressChartModeAll) progressChartModeAll.classList.toggle("active", mode === "all");
+        renderProgressChart();
+    };
+    if (progressChartModeRecent) {
+        progressChartModeRecent.addEventListener('click', () => setChartMode("recent"));
+        progressChartModeRecent.addEventListener('touchstart', () => setChartMode("recent"));
+    }
+    if (progressChartModeAll) {
+        progressChartModeAll.addEventListener('click', () => setChartMode("all"));
+        progressChartModeAll.addEventListener('touchstart', () => setChartMode("all"));
+    }
 
     if (checkProgressBtnRaja) {
         checkProgressBtnRaja.addEventListener('click', () => openProgress(promisesealedraja));
@@ -1482,17 +1586,19 @@ postq7Next.addEventListener("touchstart", handlePostQ7Next);
         progressClearBtn.addEventListener('touchstart', clearProgress);
     }
 
-    // Left/right nudge arrows scroll the chart by one attempt's width
+    // Left/right nudge arrows scroll the chart by roughly one screenful,
+    // based on the chart's actual current visible width — not a fixed
+    // pixel jump, which could badly overshoot a barely-scrollable chart.
     if (progressChartArrowLeft && progressChartScroll) {
         const scrollLeftHandler = () => {
-            progressChartScroll.scrollBy({ left: -CHART_ATTEMPT_STEP * 2, behavior: 'smooth' });
+            progressChartScroll.scrollBy({ left: -(lastChartVisibleWidth || CHART_ATTEMPT_STEP * 2) * 0.85, behavior: 'smooth' });
         };
         progressChartArrowLeft.addEventListener('click', scrollLeftHandler);
         progressChartArrowLeft.addEventListener('touchstart', scrollLeftHandler);
     }
     if (progressChartArrowRight && progressChartScroll) {
         const scrollRightHandler = () => {
-            progressChartScroll.scrollBy({ left: CHART_ATTEMPT_STEP * 2, behavior: 'smooth' });
+            progressChartScroll.scrollBy({ left: (lastChartVisibleWidth || CHART_ATTEMPT_STEP * 2) * 0.85, behavior: 'smooth' });
         };
         progressChartArrowRight.addEventListener('click', scrollRightHandler);
         progressChartArrowRight.addEventListener('touchstart', scrollRightHandler);
