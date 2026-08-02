@@ -4,7 +4,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <script src="https://cdn.jsdelivr.net/npm/p5@1.11.5/lib/p5.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.3/addons/p5.sound.min.js"></script>
-    <link rel="stylesheet" type="text/css" href="style.css">
+    <link rel="stylesheet" type="text/css" href="style.css?v=9">
     <link href="https://fonts.googleapis.com/css2?family=Albert+Sans:wght@400;600;700&display=swap" rel="stylesheet">
     <meta charset="utf-8" />
   </head>
@@ -1041,9 +1041,15 @@
       <div class="progressHeading">Compression<br>performance</div>
 
       <div class="progressLatestCard">
-        <div class="progressLatestLabel">Good compression score</div>
-        <div class="progressLatestValue" id="progressLatestValue">
-          <span id="progressLatestScore">0</span><span class="progressLatestDenom" id="progressLatestDenom">/0</span>
+        <div class="progressLatestCol">
+          <div class="progressLatestLabel">Good compression score</div>
+          <div class="progressLatestValue" id="progressLatestValue">
+            <span id="progressLatestScore">0</span><span class="progressLatestDenom" id="progressLatestDenom">/0</span>
+          </div>
+        </div>
+        <div class="progressLatestCol">
+          <div class="progressLatestLabel">Average compression rhythm</div>
+          <div class="progressLatestBpmValue" id="progressLatestBpmValue"><span id="progressLatestBpm">0</span> BPM</div>
         </div>
       </div>
 
@@ -1076,6 +1082,6 @@
 
     <main>
     </main>
-    <script src="sketch.js"></script>
+    <script src="sketch.js?v=9"></script>
   </body>
 </html>
