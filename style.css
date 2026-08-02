@@ -864,14 +864,24 @@ left: 5vw; }
   max-width: 340px;
   background: #fff;
   border-radius: 18px;
-  padding: 18px 22px;
+  padding: 18px 16px;
   box-sizing: border-box;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.progressLatestCol {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
 }
 
 .progressLatestLabel {
   font-family: 'Albert Sans', sans-serif;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
   color: #222;
   margin-bottom: 6px;
@@ -889,10 +899,17 @@ left: 5vw; }
   font-weight: 600;
 }
 
+.progressLatestBpmValue {
+  font-family: 'Albert Sans', sans-serif;
+  font-size: 26px;
+  font-weight: 700;
+  color: #038660;   /* default; overridden inline by JS — green when within the 100-120 target range, red otherwise */
+}
+
 /* Recent-7 / All toggle, sits between the score card and the chart */
 .progressChartModeToggle {
   position: absolute;
-  top: 36vh;
+  top: 39vh;
   left: 8vw;
   width: 84vw;
   max-width: 340px;
@@ -922,7 +939,7 @@ left: 5vw; }
 
 .progressChartWrap {
   position: absolute;
-  top: 42vh;
+  top: 45vh;
   left: 8vw;
   width: 84vw;
   max-width: 340px;
