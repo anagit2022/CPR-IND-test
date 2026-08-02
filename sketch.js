@@ -1,11 +1,7 @@
 let userName = "";        // learner's name, used to track their progress
 let scoreLoggedForAttempt = false;  // guards against logging the same attempt multiple times
-const CHART_ATTEMPT_STEP = 92;   // fixed px spacing between attempts in the progress chart
-const CHART_MIN_STEP = 36;          // px, minimum spacing between points before the "all" view needs to scroll
-const CHART_RECENT_COUNT = 7;       // number of attempts shown in "recent" (zoomed-in) mode
+const CHART_WINDOW_SIZE = 7;        // number of attempts shown in "recent" (zoomed-in) mode
 let chartMode = "recent";           // "recent" | "all" — toggled by the chart's view buttons
-const CHART_OVERFLOW_TOLERANCE = 20; // px of "overflow" small enough to just treat as a perfect fit
-let lastChartVisibleWidth = 0;       // px, remembered so the arrow buttons can scroll by a sensible page amount
 let genderState = null;   // 1 = Raja, 0 = Rani
 // pre question answers
 let preAnswers = {
@@ -35,6 +31,7 @@ let breath_no ;
 let breathTimerInterval = null; // holds the setInterval id for the checkbreathing countdown badge
 let dialedNumber = ''; // <-- Dial Pad Variable
 let t1, t2, t3, t4, t5,t6;
+let tOkOk, tHmHm; // timers for the "ok ok" / "hm hm" filler audio after pressing speaker
 let canvas;
 let canvasActive = false;
 let count=0;
@@ -54,6 +51,8 @@ let progress = 0;
 //bpm meter
 let angle = 0;
 let bpm = 0; 
+let bpmSum = 0;         // running total of every instantaneous BPM reading this session, for the average
+let bpmSampleCount = 0; // how many readings have gone into bpmSum
 let numberToDisplay;
 let decayRate = 10;
 let decay_normal = 90;
@@ -98,6 +97,8 @@ function preload(){
   dial = loadSound("9aud.mp3");
   addspeakeraud = loadSound("ElevenLabs_2025-11-04T12_00_41_Alice_pre_sp100_s50_sb75_v3.mp3");
   victimaud = loadSound("ElevenLabs_2025-11-04T17_32_18_Alice_pre_sp100_s50_sb75_v3.mp3");
+  okokaud = loadSound("ok_ok.mp3");   // filler audio: dispatcher says "ok ok" — rename if your file differs
+  hmhmaud = loadSound("hm_hm.mp3");   // filler audio: dispatcher says "hm hm" — rename if your file differs
 
   cprC1aud = loadSound("ElevenLabs_2025-06-28T05_17_33_Alice_pre_sp100_s50_sb75_v3.mp3");
   cprC2aud = loadSound("ElevenLabs_2025-06-25T03_15_33_Alice_pre_sp100_s50_sb75_v3.mp3");
@@ -200,6 +201,7 @@ function logProgress() {
       percent: maxTotalCompressions > 0
         ? Math.round((good_compression / maxTotalCompressions) * 100)
         : 0,
+      avgBpm: bpmSampleCount > 0 ? Math.round(bpmSum / bpmSampleCount) : 0,
       date: new Date().toISOString()
     };
     const log = JSON.parse(localStorage.getItem("cprProgressLog") || "[]");
@@ -257,6 +259,8 @@ function renderProgressChart() {
   const latestScoreEl = document.getElementById("progressLatestScore");
   const latestDenomEl = document.getElementById("progressLatestDenom");
   const latestValueEl = document.getElementById("progressLatestValue");
+  const latestBpmEl = document.getElementById("progressLatestBpm");
+  const latestBpmValueEl = document.getElementById("progressLatestBpmValue");
   const arrowLeft = document.getElementById("progressChartArrowLeft");
   const arrowRight = document.getElementById("progressChartArrowRight");
   const tooltip = document.getElementById("progressTooltip");
@@ -278,6 +282,16 @@ function renderProgressChart() {
     if (latestValueEl) {
       const latestDiff = latest ? Math.abs(latest.max - latest.score) : 0;
       latestValueEl.style.color = (!latest || latestDiff <= 10) ? "#038660" : "#FF5058";
+    }
+    if (latestBpmEl) {
+      const avgBpm = latest ? (latest.avgBpm || 0) : 0;
+      latestBpmEl.textContent = avgBpm;
+      if (latestBpmValueEl) {
+        // Green when the average sits in the standard 100-120 CPR target
+        // range (same range handle_live() treats as "good"), red otherwise.
+        const bpmInRange = avgBpm >= 100 && avgBpm <= 120;
+        latestBpmValueEl.style.color = (!latest || bpmInRange) ? "#038660" : "#FF5058";
+      }
     }
   }
 
@@ -301,33 +315,28 @@ function renderProgressChart() {
   if (axisNums) axisNums.style.display = "block";
   if (noDataEl) noDataEl.style.display = "none";
 
-  // "recent" mode shows only the last CHART_RECENT_COUNT attempts,
-  // spaced to exactly fill the visible width (a "zoomed in" view that
-  // never needs scrolling). "all" mode shows every attempt — spaced to
-  // fill the width too when there aren't many, but falling back to a
-  // fixed minimum spacing (and horizontal scroll) once there are enough
-  // attempts that any smaller spacing would make the points illegible.
-  const displayRecords = chartMode === "recent"
-    ? allRecords.slice(-CHART_RECENT_COUNT)
-    : allRecords;
-  const indexOffset = allRecords.length - displayRecords.length;
+  // "recent" (zoomed in) always shows just the latest CHART_WINDOW_SIZE
+  // attempts. "all" (zoomed out) shows literally every attempt, spread
+  // evenly across the same width — points naturally get closer together
+  // as more attempts accumulate, so the whole history is always visible
+  // at a glance with no paging or scrolling needed.
+  let displayRecords, indexOffset;
+  if (chartMode === "recent") {
+    displayRecords = allRecords.slice(-CHART_WINDOW_SIZE);
+    indexOffset = allRecords.length - displayRecords.length;
+  } else {
+    displayRecords = allRecords;
+    indexOffset = 0;
+  }
 
   const wrapRect = chartWrap.getBoundingClientRect();
   const trackHeight = Math.max(Math.round(wrapRect.height) - CHART_BASELINE_OFFSET, 140);
   const scrollVisibleWidth = Math.round(wrapRect.width) - CHART_GUTTER_WIDTH;
-  const step = chartMode === "recent"
-    ? scrollVisibleWidth / displayRecords.length
-    : Math.max(CHART_MIN_STEP, scrollVisibleWidth / displayRecords.length);
-  // A few px of "overflow" from rounding/clamping isn't worth scrolling for —
-  // treat anything under CHART_OVERFLOW_TOLERANCE as a perfect fit so the
-  // arrows don't appear (and can't cause a jarring near-zero-range jump).
-  const rawContentWidth = step * displayRecords.length;
-  const overflowing = rawContentWidth > scrollVisibleWidth + CHART_OVERFLOW_TOLERANCE;
-  const contentWidth = overflowing ? rawContentWidth : scrollVisibleWidth;
-  lastChartVisibleWidth = scrollVisibleWidth;
+  const step = displayRecords.length > 0 ? scrollVisibleWidth / displayRecords.length : scrollVisibleWidth;
 
-  track.style.width = contentWidth + "px";
+  track.style.width = scrollVisibleWidth + "px";
   track.style.height = trackHeight + "px";
+  scrollWrap.scrollLeft = 0; // content always fits exactly now — nothing to scroll
 
   const baseline = document.createElement("div");
   baseline.className = "chartBaseline";
@@ -348,8 +357,7 @@ function renderProgressChart() {
 
   // Gridlines + their matching fixed y-axis numbers, every 10%. axisNums
   // shares the exact same top/bottom box as the track, so a number's
-  // "bottom" offset lines up with its gridline even while the track
-  // itself scrolls horizontally underneath.
+  // "bottom" offset lines up with its gridline.
   for (let k = 0; k <= 10; k++) {
     const bottomPx = CHART_BASELINE_OFFSET + (k / 10) * usableHeight;
 
@@ -394,6 +402,14 @@ function renderProgressChart() {
     track.appendChild(seg);
   }
 
+  // As more attempts get packed into the same width, shrink the dots so
+  // neighbors don't overlap, down to a small legible floor. Below a
+  // certain spacing, per-point attempt numbers would just overlap into
+  // noise, so they're dropped — tapping a point still reveals its exact
+  // attempt via the tooltip.
+  const pointSize = Math.max(6, Math.min(16, Math.round(step - 6)));
+  const showLabels = step >= 20;
+
   points.forEach((p, i) => {
     const r = p.record;
     const diff = Math.abs(r.max - r.score);
@@ -403,25 +419,30 @@ function renderProgressChart() {
     point.className = "chartPoint";
     point.style.left = p.x + "px";
     point.style.bottom = p.bottomPx + "px";
+    point.style.width = pointSize + "px";
+    point.style.height = pointSize + "px";
+    point.style.borderWidth = (pointSize <= 9 ? 1 : 2) + "px";
     point.style.background = color;
     const onTap = (e) => { e.preventDefault(); showChartTooltip(point, r); };
     point.addEventListener("click", onTap);
     point.addEventListener("touchend", onTap);
     track.appendChild(point);
 
-    const attemptLabel = document.createElement("div");
-    attemptLabel.className = "chartAttemptLabel";
-    attemptLabel.style.left = p.x + "px";
-    attemptLabel.style.bottom = "2px";
-    attemptLabel.textContent = indexOffset + i + 1; // real attempt number, not reset per view
-    track.appendChild(attemptLabel);
+    if (showLabels) {
+      const attemptLabel = document.createElement("div");
+      attemptLabel.className = "chartAttemptLabel";
+      attemptLabel.style.left = p.x + "px";
+      attemptLabel.style.bottom = "2px";
+      attemptLabel.textContent = indexOffset + i + 1; // real attempt number, not reset per view
+      track.appendChild(attemptLabel);
+    }
   });
 
-  if (arrowLeft) arrowLeft.style.display = overflowing ? "flex" : "none";
-  if (arrowRight) arrowRight.style.display = overflowing ? "flex" : "none";
-
-  // Start scrolled to the most recent attempt so it's visible by default
-  scrollWrap.scrollLeft = scrollWrap.scrollWidth;
+  // "All" mode always fits every attempt within the visible width (points
+  // just get smaller/closer as history grows), so there's never anything
+  // left to page through — the arrows stay hidden.
+  if (arrowLeft) arrowLeft.style.display = "none";
+  if (arrowRight) arrowRight.style.display = "none";
 }
 
 // Shows a small tooltip with the exact date/time above a tapped point
@@ -992,7 +1013,7 @@ postq7Next.addEventListener("touchstart", handlePostQ7Next);
 
     const handleBubbleShortcut = () => {
         userStartAudio();
-        [t1, t2, t3, t4, t5, t6].forEach(t => clearTimeout(t));
+        [t1, t2, t3, t4, t5, t6, tOkOk, tHmHm].forEach(t => clearTimeout(t));
         begin1.style.display = "none";
         intro.style.display = "none";
         cpr4.style.display = "none";
@@ -1340,6 +1361,16 @@ postq7Next.addEventListener("touchstart", handlePostQ7Next);
         addspeaker.style.display = "none";
         addedspeaker.style.display = "flex";
 
+        // Fill the quiet gap before the victim-info line with two short
+        // acknowledgement sounds from the dispatcher, so it doesn't feel
+        // like the call has gone silent.
+        tOkOk = setTimeout(() => {
+            okokaud.play();
+        }, 5000);
+        tHmHm = setTimeout(() => {
+            hmhmaud.play();
+        }, 7000);
+
         t1 = setTimeout(() => {
             addedspeaker.style.display = "none";
             victiminca.style.display = "flex";
@@ -1387,11 +1418,13 @@ postq7Next.addEventListener("touchstart", handlePostQ7Next);
     const stopAllCPRAudio = () => {
         victimaud.stop();
         addspeakeraud.stop();
+        okokaud.stop();
+        hmhmaud.stop();
         cprC1aud.stop();
         cprC2aud.stop();
         cprC3aud.stop();
         cprC4aud.stop();
-        [t1, t2, t3, t4, t5, t6].forEach(t => clearTimeout(t));
+        [t1, t2, t3, t4, t5, t6, tOkOk, tHmHm].forEach(t => clearTimeout(t));
     };
 
     const handleNextC1 = () => {
@@ -1584,24 +1617,6 @@ postq7Next.addEventListener("touchstart", handlePostQ7Next);
         };
         progressClearBtn.addEventListener('click', clearProgress);
         progressClearBtn.addEventListener('touchstart', clearProgress);
-    }
-
-    // Left/right nudge arrows scroll the chart by roughly one screenful,
-    // based on the chart's actual current visible width — not a fixed
-    // pixel jump, which could badly overshoot a barely-scrollable chart.
-    if (progressChartArrowLeft && progressChartScroll) {
-        const scrollLeftHandler = () => {
-            progressChartScroll.scrollBy({ left: -(lastChartVisibleWidth || CHART_ATTEMPT_STEP * 2) * 0.85, behavior: 'smooth' });
-        };
-        progressChartArrowLeft.addEventListener('click', scrollLeftHandler);
-        progressChartArrowLeft.addEventListener('touchstart', scrollLeftHandler);
-    }
-    if (progressChartArrowRight && progressChartScroll) {
-        const scrollRightHandler = () => {
-            progressChartScroll.scrollBy({ left: (lastChartVisibleWidth || CHART_ATTEMPT_STEP * 2) * 0.85, behavior: 'smooth' });
-        };
-        progressChartArrowRight.addEventListener('click', scrollRightHandler);
-        progressChartArrowRight.addEventListener('touchstart', scrollRightHandler);
     }
 
 
@@ -1822,6 +1837,8 @@ function mousePressed() {
             let calculatedBPM = 60000 / interval;
             bpm = calculatedBPM;
             console.log(bpm);
+            bpmSum += calculatedBPM;
+            bpmSampleCount += 1;
         }
         lastTouchTime = now;
         handle_live();
@@ -2318,6 +2335,8 @@ function reset() {
     progress = 0;
     angle = 0;
     bpm = 0;
+    bpmSum = 0;
+    bpmSampleCount = 0;
     lastTouchTime = 0;
     lastTouchElapsed = 0;
     pressed_time = 0;
